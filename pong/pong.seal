@@ -1,0 +1,188 @@
+include raylib as rl
+include math
+
+const sides = {
+  LEFT = 0,
+  RIGHT = 1
+}
+
+define create_ball(x, y, size, speed)
+  return {
+    pos = {
+      x = x,
+      y = y
+    },
+    dir = {
+      x = -1,
+      y = 0
+    },
+    size = size,
+    speed = speed,
+    is_out = false,
+    timer = 0,
+    start_speed = 400,
+    game_speed = 800
+  }
+
+define update_ball(ball, pads, dt)
+  if ball.is_out
+    if ball.timer < 1
+      ball.timer = ball.timer + dt
+    else
+      ball.is_out = false
+      ball.timer = 0
+      ball.pos.x = (WIDTH - 16) / 2
+      ball.pos.y = (HEIGHT - 16) / 2
+      ball.dir.y = 0
+      ball.dir.x = if ball.dir.x > 0 then 1 else -1
+      ball.speed = ball.start_speed
+
+  ball.pos.x = ball.pos.x + ball.dir.x * ball.speed * dt
+  ball.pos.y = ball.pos.y + ball.dir.y * ball.speed * dt
+
+  for pad in pads
+    if (ball.pos.x < pad.pos.x + pad.size.w and
+        ball.pos.x + ball.size > pad.pos.x and
+        ball.pos.y < pad.pos.y + pad.size.h and
+        ball.pos.y + ball.size > pad.pos.y)
+      ball.pos.x = if ball.dir.x > 0 then pad.pos.x - ball.size else pad.pos.x + pad.size.w
+      ball.dir.x = -ball.dir.x
+      if ball.pos.y + ball.size / 2 > pad.pos.y + pad.size.h / 2
+        ball.dir.y = clamp(0,
+                           0.8,
+                           (((ball.pos.y + ball.size / 2) -
+                           (pad.pos.y + pad.size.h / 2)) / (pad.size.h / 2)))
+      else
+        ball.dir.y = clamp(-0.8,
+                           0,
+                           (((ball.pos.y + ball.size / 2) -
+                           (pad.pos.y + pad.size.h / 2)) / (pad.size.h / 2)))
+      normalize_ball(ball)
+
+  if ball.pos.y < 0
+    ball.pos.y = 0
+    ball.dir.y = -ball.dir.y
+  else if ball.pos.y + ball.size > HEIGHT
+    ball.pos.y = HEIGHT - ball.size
+    ball.dir.y = -ball.dir.y
+
+  if (ball.pos.x < 0 or ball.pos.x + ball.size > WIDTH) and not ball.is_out
+    ball.is_out = true
+    if ball.pos.x < 0 then left_score = left_score + 1
+    else right_score = right_score + 1
+
+define draw_ball(ball)
+  rl:draw_rectangle(ball.pos.x, ball.pos.y, ball.size, ball.size, rl:color(255, 255, 255, 255))
+
+define normalize_ball(ball)
+  ball.speed = ball.game_speed
+  const is_neg = ball.dir.x < 0
+  ball.dir.x = math:sqrt(1 - ball.dir.y ^ 2)
+  if is_neg
+    ball.dir.x = -ball.dir.x
+
+define clamp(min, max, val)
+  if val < min then return min
+  if val > max then return max
+  return val
+
+define create_pad(x, y, w, h, speed, side)
+  return {
+    pos = {
+      x = x,
+      y = y
+    },
+    size = {
+      w = w,
+      h = h
+    },
+    speed = speed,
+    side = side
+  }
+
+define update_pad(pad, dt)
+  var dy = 0
+  if pad.side == sides.LEFT
+    if rl:is_key_down(rl:keys().KEY_W)
+      dy = dy - 1
+    if rl:is_key_down(rl:keys().KEY_S)
+      dy = dy + 1
+  else if pad.side == sides.RIGHT
+    if rl:is_key_down(rl:keys().KEY_UP)
+      dy = dy - 1
+    if rl:is_key_down(rl:keys().KEY_DOWN)
+      dy = dy + 1
+
+  pad.pos.y = pad.pos.y + pad.speed * dy * dt
+  
+  if pad.pos.y < 0
+    pad.pos.y = 0
+  else if pad.pos.y + pad.size.h > HEIGHT
+    pad.pos.y = HEIGHT - pad.size.h
+
+define draw_pad(pad)
+  rl:draw_rectangle(pad.pos.x, pad.pos.y, pad.size.w, pad.size.h, rl:color(255, 255, 255, 255))
+
+const
+  WIDTH = 800
+  HEIGHT = 600
+  TITLE = 'Pong in Seal'
+  FPS = 60
+
+const
+  ball = create_ball((WIDTH - 16) / 2, (HEIGHT - 16) / 2, 16, 400)
+  pads = [
+    create_pad(32, (HEIGHT - 128) / 2, 16, 128, 550, sides.LEFT),
+    create_pad(WIDTH - 16 - 32, (HEIGHT - 128) / 2, 16, 128, 550, sides.RIGHT)
+  ]
+
+var left_score, right_score
+left_score = right_score = 0
+
+rl:init_window(WIDTH, HEIGHT, TITLE)
+rl:set_fps(FPS)
+
+while not rl:window_should_close()
+  const dt = rl:delta_time()
+  update_ball(ball, pads, dt)
+  for pad in pads
+    update_pad(pad, dt)
+
+  rl:begin_drawing()
+  rl:clear_background(rl:color(0, 0, 0, 255))
+
+  const
+    left_score_text  = format('%', left_score) 
+    right_score_text = format('%', right_score) 
+    font_size = 256
+    font_y_size = 236
+    font_y = (HEIGHT- font_y_size) / 2
+  // leftside text
+  rl:draw_text(
+    left_score_text,
+    WIDTH / 4 - rl:measure_text(left_score_text, font_size) / 2,
+    font_y,
+    font_size,
+    rl:color(255, 255, 255, 40)
+  )
+  // rightside text
+  rl:draw_text(
+    right_score_text,
+    WIDTH / 4 * 3 - rl:measure_text(right_score_text, font_size) / 2,
+    font_y,
+    font_size,
+    rl:color(255, 255, 255, 40)
+  )
+
+  rl:draw_line_ex(
+    rl:vec2(WIDTH / 2, 0),
+    rl:vec2(WIDTH / 2, HEIGHT),
+    8,
+    rl:color(255, 255, 255, 150)
+  )
+  draw_ball(ball)
+  for pad in pads
+    draw_pad(pad)
+  rl:end_drawing()
+
+rl:close_window()
